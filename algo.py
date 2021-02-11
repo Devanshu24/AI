@@ -11,9 +11,9 @@ from tqdm import trange
 import seaborn as sns
 
 sns.set()
-np.random.seed(42)
+# np.random.seed(24)
 
-INF = 1e8
+INF = 10
 
 
 class Problem:
@@ -271,7 +271,7 @@ class TSP(Problem):
         for i in range(len(config) - 1):
             res += self.distances[config[i]][config[i + 1]]
 
-        return -res
+        return 1500 - res
 
 
 class NQueens(Problem):
@@ -284,6 +284,7 @@ class NQueens(Problem):
         return np.stack(list_population, axis=0)
 
     def fitness_fn(self, board):
+        board=np.array(board)
         n = board.shape[-1]
         row_frequency = [0] * n
         main_diag_frequency = [0] * (2 * n)
@@ -309,8 +310,12 @@ class NQueens(Problem):
 class GeneticAlgo:
     def __init__(self, problem):
         self.problem = problem
-        self.fitnesses = []
         self.population = self.problem.get_start_population()
+        self.fitnesses = [np.max(
+                    np.array(
+                        [self.problem.fitness_fn(member) for member in self.population]
+                    )
+                )]
 
     def selector(self, population, fitness_fn, size=1):
         weights = np.array([fitness_fn(board) for board in population])
@@ -329,38 +334,40 @@ class GeneticAlgo:
         new_guy = np.array(x[: int(slice_idx)])
         return np.append(new_guy, np.array(y[int(slice_idx) :]))
 
-    def mutate(self, x):
-        if np.random.rand() < 0.1:
+    def mutate(self, x, force=False):
+        if np.random.rand() < 0.1 or force:
             x[np.random.randint(8)] = np.random.randint(8)
         return x
 
     def train(self, num_iterations=100):
-        for epoch in trange(num_iterations):
-            new_population = []
-            for i in range(len(self.population)):
-                x = self.selector(self.population, self.problem.fitness_fn)
-                y = self.selector(self.population, self.problem.fitness_fn)
-                child = self.reproduce(x, y)
-                child = self.mutate(child)
-                new_population.append(child)
-            self.population = new_population
-            best_individual = np.argmax(
-                np.array([self.problem.fitness_fn(member) for member in new_population])
-            )
-            self.fitnesses.append(
-                np.max(
-                    np.array(
-                        [self.problem.fitness_fn(member) for member in new_population]
+        with trange(num_iterations) as t:
+            for epoch in t:
+                new_population = []
+                for i in range(len(self.population)):
+                    x = self.selector(self.population, self.problem.fitness_fn)
+                    y = self.selector(self.population, self.problem.fitness_fn)
+                    child = self.reproduce(x, y)
+                    child = self.mutate(child)
+                    new_population.append(child)
+                self.population = new_population
+                best_individual = np.argmax(
+                    np.array([self.problem.fitness_fn(member) for member in new_population])
+                )
+                self.fitnesses.append(
+                    np.max(
+                        np.array(
+                            [self.problem.fitness_fn(member) for member in new_population]
+                        )
                     )
                 )
-            )
-            if self.fitnesses[-1] == 29:
-                break
-                pass
-            if epoch == 400:
-                # pprint(self.population)
-                pass
-            # t.set_postfix(fitness=fitnesses[-1], gen=epoch)
+                t.set_postfix(maxF=self.fitnesses[-1])
+                if self.fitnesses[-1] == 29:
+                    # break
+                    pass
+                if epoch == 400:
+                    # pprint(self.population)
+                    pass
+                # t.set_postfix(fitness=fitnesses[-1], gen=epoch)
 
     def plot_fitnesses(self):
         sns.set_palette("colorblind")
@@ -373,6 +380,89 @@ class GeneticAlgo:
 class FastGeneticAlgo(GeneticAlgo):
     def __init__(self, problem):
         super().__init__(problem)
+        
+    def reproduce(self, x, y):
+        candidates=[]
+        for slice_idx in range(8):
+            x=np.array(x)
+            y=np.array(y)
+            x = list(x.flatten())
+            y = list(y.flatten())
+            candidate1 = x[:slice_idx]+y[slice_idx:]
+            candidate2 = x[:8-slice_idx]+y[8-slice_idx:]
+            candidates.append(candidate1)
+            candidates.append(candidate2)
+        candidates=np.array(candidates)
+        res = self.greedy_selector(np.array(candidates), self.problem.fitness_fn)
+        return res.flatten()
+
+    def greedy_selector(self, population, fitness_fn):
+        weights = [fitness_fn(board) for board in population]
+        idx = np.argmax(weights)
+        return population[idx]
+    
+    def selector(self, population, fitness_fn, size=1):
+        weights = [fitness_fn(board) for board in population]
+        probs = [np.exp(weight) / np.sum(np.exp(weights)) for weight in weights]
+        indices = np.random.choice(
+            [i for i in range(len(population))], size=size, p=probs
+        )
+        population = np.array(population)
+        return population[indices]
+    
+    def train(self, num_iterations=100):
+        with trange(num_iterations) as t:
+            for epoch in t:
+                new_population = []
+                for i in range(len(self.population)):
+                    x = self.selector(self.population, self.problem.fitness_fn)
+                    y = self.selector(self.population, self.problem.fitness_fn)
+                    child = self.reproduce(x, y)
+                    child = self.mutate(child, force=epoch>200 and self.fitnesses[-1]==self.fitnesses[-10] and self.fitnesses[-1]!=29)
+                    new_population.append(child)
+                self.population = new_population
+                best_individual = np.argmax(
+                    np.array([self.problem.fitness_fn(member) for member in new_population])
+                )
+                self.fitnesses.append(
+                    np.max(
+                        np.array(
+                            [self.problem.fitness_fn(member) for member in new_population]
+                        )
+                    )
+                )
+                t.set_postfix(maxF=self.fitnesses[-1])
+
+
+class TSPAlgo(GeneticAlgo):
+    def __init__(self, problem):
+        super().__init__(problem)
+
+    def mutate(self, x):
+        x=np.array(x)
+        idx1 = np.random.randint(x.shape[-1])
+        idx2 = np.random.randint(x.shape[-1])
+        temp = x[idx1]
+        x[idx1] = x[idx2]
+        x[idx2] = temp
+        return x
+
+    def reproduce(self, x, y):
+        idx1 = np.random.randint(x.shape[-1])
+        idx2 = idx1 + 2
+        res = np.array([chr(ord("A")+i) for i in range(x.shape[-1])])
+        # print(idx1, idx2)
+        # print(res[idx1:idx2])
+        # print(x.flatten())
+        print(f"idx1: {idx1}, idx2: {idx2}")
+        res[idx1:idx2] = x.flatten()[idx1:idx2]
+        i = 0
+        for e in y:
+            if e not in res and i not in range(idx1, idx2):
+                res[i] = e
+                i = (i + 1 + (x.shape[-1])) % (x.shape[-1])
+
+        return res
 
     def selector(self, population, fitness_fn, size=1):
         weights = [fitness_fn(board) for board in population]
@@ -385,73 +475,59 @@ class FastGeneticAlgo(GeneticAlgo):
         return population[indices]
 
 
-class TSPAlgo(GeneticAlgo):
-    def __init__(self, problem):
-        super().__init__(problem)
-
-    def mutate(self, x):
-        idx1 = np.random.randint(len(x))
-        idx2 = np.random.randint(len(x))
-        temp = x[idx1]
-        x[idx1] = x[idx2]
-        x[idx2] = temp
-        return x
-
-    def reproduce(self, x, y):
-        idx1 = np.random.randint(x.shape[1])
-        idx2 = idx1 + 2
-        res = np.ones_like(x)
-        print(x.shape)
-        print(res)
-        res *= -1
-        res[idx1:idx2] = x[idx1:idx2]
-        i = 0
-        for e in y:
-            if e not in res and i not in range(idx1, idx2):
-                res[i] = e
-                i = (i + 1 + len(x)) % len(x)
-
-        return res
-
-    def selector(self, population, fitness_fn, size=1):
-        weights = [fitness_fn(board) for board in population]
-        # return population[np.argmax(weights)]
-        probs = [weight / sum(weights) for weight in weights]
-        indices = np.random.choice(
-            [i for i in range(len(population))], size=size, p=probs
-        )
-        population = np.array(population)
-        return population[indices]
-
-
 if __name__ == "__main__":
 
-    num_counts = []
-    for i in trange(1):
-        n_queens = NQueens()
-        my_genetic_algo = GeneticAlgo(n_queens)
-        my_genetic_algo.train(int(sys.argv[1]))
-        my_genetic_algo.plot_fitnesses()
-        num_counts.append(len(my_genetic_algo.fitnesses))
+    avg_fitnesses_fast = []
+    avg_fitnesses_slow = []
+    with trange(100) as t:
+        for i in t:
+            n_queens = NQueens()
+            my_genetic_algo = GeneticAlgo(n_queens)
+            fast_genetic_algo = FastGeneticAlgo(n_queens)
+            my_genetic_algo.train(int(sys.argv[1]))
+            fast_genetic_algo.train(int(sys.argv[1]))
+            avg_fitnesses_fast.append((fast_genetic_algo.fitnesses))
+            avg_fitnesses_slow.append(my_genetic_algo.fitnesses)
+            t.set_postfix(maxFast=max(fast_genetic_algo.fitnesses), maxSlow=max(my_genetic_algo.fitnesses), gFast=len(fast_genetic_algo.fitnesses), gSlow=len(my_genetic_algo.fitnesses))
+            if (i+1)%2 == 0:
+                print(len(avg_fitnesses_fast), len(avg_fitnesses_fast[0]))
+                sns.set_palette("colorblind")
+                sns.set_context("paper")
+                plt.suptitle("Genetic Algorithm on NQueens", fontsize='x-large')
+                plt.title(f"Averaged over {i+1} runs")
+                plt.xlabel("#Generation")
+                plt.yticks(np.arange(0, 31, step=2))
+                plt.ylabel("Max Fitness of the Population")
+                plt.plot(np.mean(avg_fitnesses_fast, axis=0), label="Optimized Algorithm")
+                plt.plot(np.mean(avg_fitnesses_slow, axis=0), label="Original Algorithm")
+                plt.legend(loc="best")
+                plt.savefig(f'./Plots/CompGen2Plot/CompGen2Plot{i+1}.png')
+                plt.clf()
+            # if (i+1)%10 == 0:
+            #     fig, ax = plt.subif(self.problem.fitness_fn(candidate1)>self.problem.fitness_fn(candidate2)):
+            #     return candidate1
+            # else:
+            #     return candidate2plots(1, 1)
+            #     ax.hist(num_counts)
+            #     ax.set_title("Histogram of result")
 
-    fig, ax = plt.subplots(1, 1)
-    a = num_counts
-    ax.hist(
-        a, bins=[1, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 6000]
-    )
-    ax.set_title("Histogram of result")
+            #     ax.set_xlabel("Generations")
+            #     ax.set_ylabel("Number of times")
+            #     plt.savefig(f"./Plots/FastHistMax_{i}.png")
 
-    ax.set_xlabel("Generations")
-    ax.set_ylabel("Number of times")
-    plt.show()
+    # tsp_algo = FastGeneticAlgo(queens)
+    # tsp_algo.train(int(sys.argv[1]))
+    # tsp_algo.plot_fitnesses()
+    
+    # n_queens = NQueens()
     # fast_algo = FastGeneticAlgo(n_queens)
     # fast_algo.train(int(sys.argv[1]))
-    # my_genetic_algo.plot_fitnesses()
-
+    # my_genetic_algo = GeneticAlgo(n_queens)
+    # my_genetic_algo.train(int(sys.argv[1]))
     # sns.set_context("paper")
     # plt.plot(my_genetic_algo.fitnesses, label="Slowww")
     # plt.plot(fast_algo.fitnesses, label="FASTTTTT")
     # plt.legend(loc="best")
     # # my_genetic_algo.train()
     # plt.title("Genetic Algorithm on nQueens")
-    # plt.show()
+    # # plt.show()
