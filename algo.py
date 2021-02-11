@@ -334,8 +334,8 @@ class GeneticAlgo:
         new_guy = np.array(x[: int(slice_idx)])
         return np.append(new_guy, np.array(y[int(slice_idx) :]))
 
-    def mutate(self, x, force=False):
-        if np.random.rand() < 0.1 or force:
+    def mutate(self, x, epoch=None):
+        if np.random.rand() < 0.1:
             x[np.random.randint(8)] = np.random.randint(8)
         return x
 
@@ -347,9 +347,10 @@ class GeneticAlgo:
                     x = self.selector(self.population, self.problem.fitness_fn)
                     y = self.selector(self.population, self.problem.fitness_fn)
                     child = self.reproduce(x, y)
-                    child = self.mutate(child)
+                    child = self.mutate(child, epoch=epoch)
                     new_population.append(child)
-                self.population = new_population
+                
+                self.population = np.array(new_population)
                 best_individual = np.argmax(
                     np.array([self.problem.fitness_fn(member) for member in new_population])
                 )
@@ -360,14 +361,7 @@ class GeneticAlgo:
                         )
                     )
                 )
-                t.set_postfix(maxF=self.fitnesses[-1])
-                if self.fitnesses[-1] == 29:
-                    # break
-                    pass
-                if epoch == 400:
-                    # pprint(self.population)
-                    pass
-                # t.set_postfix(fitness=fitnesses[-1], gen=epoch)
+                t.set_postfix(Smax=self.fitnesses[-1])
 
     def plot_fitnesses(self):
         sns.set_palette("colorblind")
@@ -384,17 +378,12 @@ class FastGeneticAlgo(GeneticAlgo):
     def reproduce(self, x, y):
         candidates=[]
         for slice_idx in range(8):
-            x=np.array(x)
-            y=np.array(y)
-            x = list(x.flatten())
-            y = list(y.flatten())
-            candidate1 = x[:slice_idx]+y[slice_idx:]
-            candidate2 = x[:8-slice_idx]+y[8-slice_idx:]
+            candidate1 = np.concatenate([x[:slice_idx], y[slice_idx:]])
+            candidate2 = np.concatenate([x[ :8-slice_idx], y[8-slice_idx:]])
             candidates.append(candidate1)
             candidates.append(candidate2)
         candidates=np.array(candidates)
-        res = self.greedy_selector(np.array(candidates), self.problem.fitness_fn)
-        return res.flatten()
+        return self.greedy_selector(np.array(candidates), self.problem.fitness_fn)
 
     def greedy_selector(self, population, fitness_fn):
         weights = [fitness_fn(board) for board in population]
@@ -407,31 +396,13 @@ class FastGeneticAlgo(GeneticAlgo):
         indices = np.random.choice(
             [i for i in range(len(population))], size=size, p=probs
         )
-        population = np.array(population)
-        return population[indices]
+        return population[indices].flatten()
     
-    def train(self, num_iterations=100):
-        with trange(num_iterations) as t:
-            for epoch in t:
-                new_population = []
-                for i in range(len(self.population)):
-                    x = self.selector(self.population, self.problem.fitness_fn)
-                    y = self.selector(self.population, self.problem.fitness_fn)
-                    child = self.reproduce(x, y)
-                    child = self.mutate(child, force=epoch>200 and self.fitnesses[-1]==self.fitnesses[-10] and self.fitnesses[-1]!=29)
-                    new_population.append(child)
-                self.population = new_population
-                best_individual = np.argmax(
-                    np.array([self.problem.fitness_fn(member) for member in new_population])
-                )
-                self.fitnesses.append(
-                    np.max(
-                        np.array(
-                            [self.problem.fitness_fn(member) for member in new_population]
-                        )
-                    )
-                )
-                t.set_postfix(maxF=self.fitnesses[-1])
+    def mutate(self, x, epoch=None):
+        force = epoch>200 and self.fitnesses[-1]==self.fitnesses[-10] if epoch else False
+        if np.random.rand() < 0.1 or force:
+            x[np.random.randint(8)] = np.random.randint(8)
+        return x
 
 
 class TSPAlgo(GeneticAlgo):
@@ -451,10 +422,6 @@ class TSPAlgo(GeneticAlgo):
         idx1 = np.random.randint(x.shape[-1])
         idx2 = idx1 + 2
         res = np.array([chr(ord("A")+i) for i in range(x.shape[-1])])
-        # print(idx1, idx2)
-        # print(res[idx1:idx2])
-        # print(x.flatten())
-        print(f"idx1: {idx1}, idx2: {idx2}")
         res[idx1:idx2] = x.flatten()[idx1:idx2]
         i = 0
         for e in y:
@@ -466,7 +433,6 @@ class TSPAlgo(GeneticAlgo):
 
     def selector(self, population, fitness_fn, size=1):
         weights = [fitness_fn(board) for board in population]
-        # return population[np.argmax(weights)]
         probs = [np.exp(weight) / np.sum(np.exp(weights)) for weight in weights]
         indices = np.random.choice(
             [i for i in range(len(population))], size=size, p=probs
@@ -484,7 +450,7 @@ if __name__ == "__main__":
             n_queens = NQueens()
             my_genetic_algo = GeneticAlgo(n_queens)
             fast_genetic_algo = FastGeneticAlgo(n_queens)
-            my_genetic_algo.train(int(sys.argv[1]))
+            # my_genetic_algo.train(int(sys.argv[1]))
             fast_genetic_algo.train(int(sys.argv[1]))
             avg_fitnesses_fast.append((fast_genetic_algo.fitnesses))
             avg_fitnesses_slow.append(my_genetic_algo.fitnesses)
@@ -501,7 +467,7 @@ if __name__ == "__main__":
                 plt.plot(np.mean(avg_fitnesses_fast, axis=0), label="Optimized Algorithm")
                 plt.plot(np.mean(avg_fitnesses_slow, axis=0), label="Original Algorithm")
                 plt.legend(loc="best")
-                plt.savefig(f'./Plots/CompGen2Plot/CompGen2Plot{i+1}.png')
+                plt.savefig(f'./Plots/CleanupPlot/CleanupPlot{i+1}.png')
                 plt.clf()
             # if (i+1)%10 == 0:
             #     fig, ax = plt.subif(self.problem.fitness_fn(candidate1)>self.problem.fitness_fn(candidate2)):
