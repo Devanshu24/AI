@@ -441,21 +441,48 @@ class FastTSP(TSPAlgo):
         super().__init__(problem)
         
     def mutate(self, x, epoch=None):
-        x = super().mutate(x, epoch=epoch)
-        return np.flip(x)
+        res = (super().mutate(x, epoch=epoch)).tolist()
+        rotated_res = res[:]
+        rotate_idx = np.random.randint(len(res))
+        rotated_res[rotate_idx:] = res[:-rotate_idx]
+        rotated_res[:rotate_idx] = res[-rotate_idx:]
+        assert np.allclose(self.problem.fitness_fn(res), self.problem.fitness_fn(rotated_res))
+        return np.array(rotated_res)
     
     def reproduce(self, x, y):
-        res =  super().reproduce(x, y)
-        return np.flip(res)
+        candidates = []
+        for start_idx in range(x.shape[0]):
+            end_idx = np.random.randint(x.shape[0])
+            if start_idx>end_idx:
+                start_idx, end_idx = end_idx, start_idx
+            
+            res = np.array([chr(ord("X")) for i in range(x.shape[-1])])
+            
+            res[start_idx:end_idx] = x[start_idx:end_idx]
+            
+            for i in range(len(y)):
+                if y[i] not in res:
+                    for ii in range(len(res)):
+                        if res[ii]=="X":
+                            res[ii]=y[i]
+                            break
+            candidates.append(res)
+        
+        return self.greedy_selector(candidates, self.problem.fitness_fn)
+    
+    def greedy_selector(self, population, fitness_fn):
+        weights = [fitness_fn(board) for board in population]
+        idx = np.argmax(weights)
+        return population[idx]
     
 if __name__ == "__main__":
     
     
-    # tsp = TSP()
-    # tsp_gen = FastTSP(tsp)
-    # tsp_gen.train(1000)
-    # tsp_gen.plot_fitnesses()
-    # sys.exit(0)
+    tsp = TSP()
+    tsp_gen = FastTSP(tsp)
+    tsp_gen.train(1000)
+    tsp_gen.plot_fitnesses()
+    sys.exit(0)
 
     avg_fitnesses_fast = []
     avg_fitnesses_slow = []
@@ -482,7 +509,7 @@ if __name__ == "__main__":
                 plt.plot(np.mean(avg_fitnesses_slow, axis=0), label="Original Algorithm")
                 plt.legend(loc="best")
                 # plt.show()
-                plt.savefig(f'./Plots/CompTSP/CompTSP{i+1}.png')
+                plt.savefig(f'./Plots/RotateTSP/RotateTSP{i+1}.png')
                 plt.clf()
             # if (i+1)%10 == 0:
             #     fig, ax = plt.subif(self.problem.fitness_fn(candidate1)>self.problem.fitness_fn(candidate2)):
