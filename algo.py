@@ -267,11 +267,13 @@ class TSP(Problem):
         return np.stack(list_population, axis=0)
 
     def fitness_fn(self, config):
-        res = 0
+        res = self.distances[config[-1]][config[0]]
         for i in range(len(config) - 1):
+            # print(self.distances[config[i]][config[i + 1]]*100)
             res += self.distances[config[i]][config[i + 1]]
-
-        return 1500 - res
+        # if res<1000:
+        return 1/res
+        # return 1
 
 
 class NQueens(Problem):
@@ -327,7 +329,7 @@ class GeneticAlgo:
             [i for i in range(len(population))], size=size, p=probs
         )
         population = np.array(population)
-        return population[indices]
+        return population[indices].flatten()
 
     def reproduce(self, x, y):
         slice_idx = np.random.randint(8)
@@ -409,65 +411,78 @@ class TSPAlgo(GeneticAlgo):
     def __init__(self, problem):
         super().__init__(problem)
 
-    def mutate(self, x):
-        x=np.array(x)
-        idx1 = np.random.randint(x.shape[-1])
-        idx2 = np.random.randint(x.shape[-1])
-        temp = x[idx1]
-        x[idx1] = x[idx2]
-        x[idx2] = temp
+    def mutate(self, x, epoch=None):
+        if np.random.rand()<0.2:
+            idx1 = np.random.randint(x.shape[0])
+            idx2 = np.random.randint(x.shape[0])
+            x[idx1], x[idx2] = x[idx2], x[idx1]
         return x
 
     def reproduce(self, x, y):
-        idx1 = np.random.randint(x.shape[-1])
-        idx2 = idx1 + 2
-        res = np.array([chr(ord("A")+i) for i in range(x.shape[-1])])
-        res[idx1:idx2] = x.flatten()[idx1:idx2]
-        i = 0
-        for e in y:
-            if e not in res and i not in range(idx1, idx2):
-                res[i] = e
-                i = (i + 1 + (x.shape[-1])) % (x.shape[-1])
-
+        start_idx = np.random.randint(x.shape[0])
+        end_idx = np.random.randint(x.shape[0])
+        if start_idx>end_idx:
+            start_idx, end_idx = end_idx, start_idx
+        
+        res = np.array([chr(ord("X")) for i in range(x.shape[-1])])
+        
+        res[start_idx:end_idx] = x[start_idx:end_idx]
+        
+        for i in range(len(y)):
+            if y[i] not in res:
+                for ii in range(len(res)):
+                    if res[ii]=="X":
+                        res[ii]=y[i]
+                        break
         return res
 
-    def selector(self, population, fitness_fn, size=1):
-        weights = [fitness_fn(board) for board in population]
-        probs = [np.exp(weight) / np.sum(np.exp(weights)) for weight in weights]
-        indices = np.random.choice(
-            [i for i in range(len(population))], size=size, p=probs
-        )
-        population = np.array(population)
-        return population[indices]
-
-
+class FastTSP(TSPAlgo):
+    def __init__(self, problem):
+        super().__init__(problem)
+        
+    def mutate(self, x, epoch=None):
+        x = super().mutate(x, epoch=epoch)
+        return np.flip(x)
+    
+    def reproduce(self, x, y):
+        res =  super().reproduce(x, y)
+        return np.flip(res)
+    
 if __name__ == "__main__":
+    
+    
+    # tsp = TSP()
+    # tsp_gen = FastTSP(tsp)
+    # tsp_gen.train(1000)
+    # tsp_gen.plot_fitnesses()
+    # sys.exit(0)
 
     avg_fitnesses_fast = []
     avg_fitnesses_slow = []
     with trange(100) as t:
         for i in t:
-            n_queens = NQueens()
-            my_genetic_algo = GeneticAlgo(n_queens)
-            fast_genetic_algo = FastGeneticAlgo(n_queens)
-            # my_genetic_algo.train(int(sys.argv[1]))
+            n_queens = TSP()
+            my_genetic_algo = TSPAlgo(n_queens)
+            fast_genetic_algo = FastTSP(n_queens)
+            my_genetic_algo.train(int(sys.argv[1]))
             fast_genetic_algo.train(int(sys.argv[1]))
             avg_fitnesses_fast.append((fast_genetic_algo.fitnesses))
             avg_fitnesses_slow.append(my_genetic_algo.fitnesses)
             t.set_postfix(maxFast=max(fast_genetic_algo.fitnesses), maxSlow=max(my_genetic_algo.fitnesses), gFast=len(fast_genetic_algo.fitnesses), gSlow=len(my_genetic_algo.fitnesses))
             if (i+1)%2 == 0:
-                print(len(avg_fitnesses_fast), len(avg_fitnesses_fast[0]))
+                print(len(avg_fitnesses_slow), len(avg_fitnesses_slow[0]))
                 sns.set_palette("colorblind")
                 sns.set_context("paper")
-                plt.suptitle("Genetic Algorithm on NQueens", fontsize='x-large')
+                plt.suptitle("Genetic Algorithm on TSP", fontsize='x-large')
                 plt.title(f"Averaged over {i+1} runs")
                 plt.xlabel("#Generation")
-                plt.yticks(np.arange(0, 31, step=2))
+                # plt.yticks(np.arange(0, 31, step=2))
                 plt.ylabel("Max Fitness of the Population")
                 plt.plot(np.mean(avg_fitnesses_fast, axis=0), label="Optimized Algorithm")
                 plt.plot(np.mean(avg_fitnesses_slow, axis=0), label="Original Algorithm")
                 plt.legend(loc="best")
-                plt.savefig(f'./Plots/CleanupPlot/CleanupPlot{i+1}.png')
+                # plt.show()
+                plt.savefig(f'./Plots/CompTSP/CompTSP{i+1}.png')
                 plt.clf()
             # if (i+1)%10 == 0:
             #     fig, ax = plt.subif(self.problem.fitness_fn(candidate1)>self.problem.fitness_fn(candidate2)):
