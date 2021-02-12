@@ -2,7 +2,6 @@ import sys
 from pprint import pprint
 
 import matplotlib as mpl
-
 # mpl.rcParams["figure.dpi"] = 600
 import matplotlib.pyplot as plt
 import numpy as np
@@ -478,11 +477,11 @@ class FastTSP(TSPAlgo):
 if __name__ == "__main__":
     
     
-    tsp = TSP()
-    tsp_gen = FastTSP(tsp)
-    tsp_gen.train(1000)
-    tsp_gen.plot_fitnesses()
-    sys.exit(0)
+    # tsp = TSP()
+    # tsp_gen = FastTSP(tsp)
+    # tsp_gen.train(1000)
+    # tsp_gen.plot_fitnesses()
+    # sys.exit(0)
 
     avg_fitnesses_fast = []
     avg_fitnesses_slow = []
@@ -509,7 +508,7 @@ if __name__ == "__main__":
                 plt.plot(np.mean(avg_fitnesses_slow, axis=0), label="Original Algorithm")
                 plt.legend(loc="best")
                 # plt.show()
-                plt.savefig(f'./Plots/RotateTSP/RotateTSP{i+1}.png')
+                plt.savefig(f'./Plots/CompTSP2Plot/CompTSP2Plot{i+1}.png')
                 plt.clf()
             # if (i+1)%10 == 0:
             #     fig, ax = plt.subif(self.problem.fitness_fn(candidate1)>self.problem.fitness_fn(candidate2)):
