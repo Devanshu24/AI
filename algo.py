@@ -1,6 +1,5 @@
 import sys
 
-# mpl.rcParams["figure.dpi"] = 600
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -290,33 +289,31 @@ class NQueens(Problem):
         list_population = [np.ones(8, dtype=int) * random_val for i in range(20)]
         return np.stack(list_population, axis=0)
 
-    def fitness_fn(self, board):
+    def fitness_fn(self, state):
         """Returns the fitness_value of an indiviual board configuration
         fitness is defined as 1 + number_of_conflicting_queens
 
         Args:
-            board (List): An individual instance of the board
+            state (List): An individual instance of the board
         """
-        board = np.array(board)
-        n = board.shape[-1]
-        row_frequency = [0] * n
-        main_diag_frequency = [0] * (2 * n)
-        secondary_diag_frequency = [0] * (2 * n)
+        state = np.array(state)
+        n = state.shape[-1]
+        row_freq = [0] * n
+        diag_freq = [0] * (2 * n)
+        diag_freq_2 = [0] * (2 * n)
 
         for i in range(n):
-            row_frequency[board[i]] += 1
-            main_diag_frequency[board[i] + i] += 1
-            secondary_diag_frequency[n - board[i] + i] += 1
+            row_freq[state[i]] += 1
+            diag_freq[state[i] + i] += 1
+            diag_freq_2[n - state[i] + i] += 1
 
         conflicts = 0
-        # formula: (N * (N - 1)) / 2
+
         for i in range(2 * n):
             if i < n:
-                conflicts += (row_frequency[i] * (row_frequency[i] - 1)) / 2
-            conflicts += (main_diag_frequency[i] * (main_diag_frequency[i] - 1)) / 2
-            conflicts += (
-                secondary_diag_frequency[i] * (secondary_diag_frequency[i] - 1)
-            ) / 2
+                conflicts += (row_freq[i] * (row_freq[i] - 1)) / 2
+            conflicts += (diag_freq[i] * (diag_freq[i] - 1)) / 2
+            conflicts += (diag_freq_2[i] * (diag_freq_2[i] - 1)) / 2
         return 1 + (28 - int(conflicts))
 
 
@@ -348,9 +345,6 @@ class GeneticAlgo:
         """
         weights = np.array([self.problem.fitness_fn(board) for board in population])
         probs = [weight / sum(weights) for weight in weights]
-        # probs = [np.exp(weight)/np.sum(np.exp(weights)) for weight in weights]
-        # probs = [weight*weight for weight in weights]
-        # probs = [prob/sum(probs) for prob in probs]
         indices = np.random.choice([i for i in range(len(population))], p=probs)
         population = np.array(population)
         return population[indices].flatten()
@@ -371,6 +365,7 @@ class GeneticAlgo:
         """Responsible for mutating an individual
         Args:
             x : Individual to mutate
+            epoch (int): the current epoch of training
         """
         if np.random.rand() < 0.1:
             x[np.random.randint(8)] = np.random.randint(8)
@@ -378,6 +373,7 @@ class GeneticAlgo:
 
     def train(self, num_generations=100):
         """The core of the algoritm, this function is responsible for making new generations of the population
+
         Args:
             num_generations (Int): Number of generations to produce
         """
@@ -415,6 +411,12 @@ class GeneticAlgo:
                     ordered_dict={f"{self.__class__.__name__}": self.fitnesses[-1]}
                 )
 
+    def greedy_selector(self, population, fitness_fn):
+        """An utility function that gives the best candidate from a population based on fitness values"""
+        weights = [fitness_fn(board) for board in population]
+        idx = np.argmax(weights)
+        return population[idx]
+
     def plot_fitnesses(self):
         """Utility function to visualize the results, plots the fitness v/s generations plot"""
         sns.set_palette("colorblind")
@@ -425,10 +427,19 @@ class GeneticAlgo:
 
 
 class FastGeneticAlgo(GeneticAlgo):
+    """An Optimized version of the Genetic Algoritm on NQueens"""
+
     def __init__(self, problem):
         super().__init__(problem)
 
     def reproduce(self, x, y):
+        """Modified reproduce, instead of generating children with random slicing it generates children based on all possible splices
+        And returns the fittest amongst them
+
+        Args:
+            x (List): Parent 1
+            y (List): Parent 2
+        """
         candidates = []
         for slice_idx in range(8):
             candidate1 = np.concatenate([x[:slice_idx], y[slice_idx:]])
@@ -438,17 +449,30 @@ class FastGeneticAlgo(GeneticAlgo):
         return self.greedy_selector(np.array(candidates), self.problem.fitness_fn)
 
     def greedy_selector(self, population, fitness_fn):
+        """An utility function that gives the best candidate from a population based on fitness values"""
         weights = [fitness_fn(board) for board in population]
         idx = np.argmax(weights)
         return population[idx]
 
     def selector(self, population):
+        """Modified selector, samples based on the softmax fitnesses instead of simply summing over them
+
+        Args:
+            population (List): A 2D list of individuals
+        """
         weights = [self.problem.fitness_fn(board) for board in population]
         probs = [np.exp(weight) / np.sum(np.exp(weights)) for weight in weights]
         indices = np.random.choice([i for i in range(len(population))], p=probs)
         return population[indices].flatten()
 
     def mutate(self, x, epoch=None):
+        """
+        Modified Mutate, with a force option to force mutation on the individual overriding the probability
+
+        Args:
+            x (List): Individual to mutate
+            epoch (int): epoch
+        """
         force = (
             epoch in range(200, 400) and self.fitnesses[-1] == self.fitnesses[-10]
             if epoch
@@ -459,32 +483,19 @@ class FastGeneticAlgo(GeneticAlgo):
         return x
 
 
-class GenCheck(FastGeneticAlgo):
-    def __init__(self, problem):
-        super().__init__(problem)
-
-    def selector(self, population):
-        """This method is responsible for selecting an individual from the population for reproducing
-
-        Args:
-            population (List): A 2D List containing individuals in different rows
-            fitness_fn
-        """
-        weights = np.array([self.problem.fitness_fn(board) for board in population])
-        probs = [weight / sum(weights) for weight in weights]
-        # probs = [np.exp(weight)/np.sum(np.exp(weights)) for weight in weights]
-        # probs = [weight*weight for weight in weights]
-        # probs = [prob/sum(probs) for prob in probs]
-        indices = np.random.choice([i for i in range(len(population))], p=probs)
-        population = np.array(population)
-        return population[indices].flatten()
-
-
 class TSPAlgo(GeneticAlgo):
+    """Basic Genetic Algorithm on TSP"""
+
     def __init__(self, problem):
         super().__init__(problem)
 
     def mutate(self, x, epoch=None):
+        """Mutates an route by swapping two cities in the route
+
+        Args:
+            x (List): Route to mutate
+            epoch (int): the current epoch of training
+        """
         if np.random.rand() < 0.2:
             idx1 = np.random.randint(x.shape[0])
             idx2 = np.random.randint(x.shape[0])
@@ -492,14 +503,20 @@ class TSPAlgo(GeneticAlgo):
         return x
 
     def reproduce(self, x, y):
+        """Responsible for doing the crossover of two routes to create a new route
+        Adds a slice of the route from x to the child in the same place and fills the remaining locations from the second parent y, if they are not already in the child
+        Returns the new route
+
+        Args:
+            x (List): Parent 1
+            y (List): Parent 2
+        """
         start_idx = np.random.randint(x.shape[0])
         end_idx = np.random.randint(x.shape[0])
         if start_idx > end_idx:
             start_idx, end_idx = end_idx, start_idx
 
         res = np.array([chr(ord("X")) for i in range(x.shape[-1])])
-
-        res[start_idx:end_idx] = x[start_idx:end_idx]
 
         for i in range(len(y)):
             if y[i] not in res:
@@ -509,83 +526,157 @@ class TSPAlgo(GeneticAlgo):
                         break
         return res
 
-
-class CycleTSP(TSPAlgo):
-    def __init__(self, problem):
-        super().__init__(problem)
-
-    def mutate(self, x, epoch=None):
-        force = (
-            epoch > 400 and self.fitnesses[-1] == self.fitnesses[-10]
-            if epoch
-            else False
-        )
-        if np.random.rand() < 0.2 or force:
-            idx1 = np.random.randint(x.shape[0])
-            idx2 = np.random.randint(x.shape[0])
-            x[idx1], x[idx2] = x[idx2], x[idx1]
-        return x
-
-    def reproduce(self, p1, p2):
-        n = p1.shape[0]
-        p1_real = p1.copy().tolist()
-        p2_real = p2.copy().tolist()
-        p1 = p1.copy().tolist()
-        p2 = p2.copy().tolist()
-        child1 = ["X" for i in range(n)]
-        child2 = ["X" for i in range(n)]
-        cycle = set()
-        count = 0
-        i = 0
-        cycle.add(p1[0])
-        p1[0] = -1
-        cycles = []
-        # print(cycle)
-        while count < n:
-            if p2[i] in cycle:
-                # print(f"i:{i}, p2[i]: {p2[i]}, cycle: {cycle}")
-                cycles.append((cycle.copy()))
-                p2[i] = -1
-                cycle.clear()
-                for j in range(n):
-                    if p1[j] != -1:
-                        i = j
-                        break
-                cycle.add(p1[i])
-                count += 1
-                p1[i] = -1
-                continue
-            i_new = p1.index(p2[i])
-            p2[i] = -1
-            i = i_new
-            cycle.add(p1[i])
-            count += 1
-            p1[i] = -1
-        # print(cycles)
-        p1 = p1_real
-        p2 = p2_real
-        for i in range(n):
-            for idx, cycle in enumerate(cycles):
-                if p1[i] in cycle:
-                    if idx % 2 == 0:
-                        child1[i] = p1[i]
-                    else:
-                        child2[i] = p1[i]
-        for i in range(n):
-            for idx, cycle in enumerate(cycles):
-                if p2[i] in cycle:
-                    if idx % 2 == 0:
-                        child2[i] = p2[i]
-                    else:
-                        child1[i] = p2[i]
-        child1 = np.array(child1)
-        child2 = np.array(child2)
-        return self.greedy_selector(np.array([child1, child2]), self.problem.fitness_fn)
-
     def greedy_selector(self, population, fitness_fn):
+        """An utility function that gives the best candidate from a population based on fitness values"""
         weights = [fitness_fn(board) for board in population]
         idx = np.argmax(weights)
         return population[idx]
+
+
+class PMXTSP(TSPAlgo):
+    """Genetic Algorithm with PMX Crossover"""
+
+    def __init__(self, problem):
+        super().__init__(problem)
+
+    def reproduce(self, x, y):
+        """Uses PMX (Partially Mapped Crossover) to reproduce
+
+        Args:
+            x (List): Parent 1
+            y (List): Parent 2
+        """
+        x = x.tolist()
+        y = y.tolist()
+
+        # Uncomment to use with TSP
+
+        x = [ord(e) - ord("A") for e in x]
+        y = [ord(e) - ord("A") for e in y]
+
+        n = len(x)
+        p1 = np.zeros(n, dtype=np.int64)
+        p2 = np.zeros(n, dtype=np.int64)
+
+        for i in range(n):
+            p1[x[i]] = i
+            p2[y[i]] = i
+
+        # Choose crossover points
+        start_idx = np.random.randint(n)
+        end_idx = np.random.randint(n)
+        if end_idx < start_idx:
+            start_idx, end_idx = end_idx, start_idx
+
+        for i in range(start_idx, end_idx):
+
+            temp1 = x[i]
+            temp2 = y[i]
+
+            x[i], x[(p1[(temp2)])] = temp2, temp1
+            y[i], y[(p2[(temp1)])] = temp1, temp2
+
+            p1[temp1], p1[temp2] = p1[temp2], p1[temp1]
+            p2[temp1], p2[temp2] = p2[temp2], p2[temp1]
+
+        # Uncomment to use with TSP
+
+        x = [chr(e + ord("A")) for e in x]
+        y = [chr(e + ord("A")) for e in y]
+        x = np.array(x)
+        y = np.array(y)
+
+        return self.greedy_selector(np.array([x, y]), self.problem.fitness_fn)
+
+
+class UPMXAlgo(TSPAlgo):
+    def __init__(self, problem):
+        super().__init__(problem)
+
+    def reproduce(self, x, y, prob=0.4):
+        """Reproduce using UPMX (Uniform Partially Mapped) Crossover"""
+        x = x.tolist()
+        y = y.tolist()
+        x = [ord(e) - ord("A") for e in x]
+        y = [ord(e) - ord("A") for e in y]
+        n = len(x)
+        p1 = np.zeros(n, dtype=np.int64)
+        p2 = np.zeros(n, dtype=np.int64)
+
+        for i in range(n):
+            p1[x[i]] = i
+            p2[y[i]] = i
+
+        for i in range(n):
+            if np.random.random() < prob:
+                temp1 = x[i]
+                temp2 = y[i]
+
+                x[i], x[p1[temp2]] = temp2, temp1
+                y[i], y[p2[temp1]] = temp1, temp2
+
+                p1[temp1], p1[temp2] = p1[temp2], p1[temp1]
+                p2[temp1], p2[temp2] = p2[temp2], p2[temp1]
+
+        x = [chr(e + ord("A")) for e in x]
+        y = [chr(e + ord("A")) for e in y]
+
+        x = np.array(x)
+        y = np.array(y)
+
+        return self.greedy_selector(np.array([x, y]), self.problem.fitness_fn)
+
+
+class OXAlgo(TSPAlgo):
+    def __init__(self, problem):
+        super().__init__(problem)
+
+    def reproduce(self, x, y):
+        """Reproduce using the OX (Ordered) Crossover"""
+        x = x.tolist()
+        y = y.tolist()
+
+        # Comment to run on NQueens
+        x = [ord(e) - ord("A") for e in x]
+        y = [ord(e) - ord("A") for e in y]
+        n = len(x)
+
+        start_idx = np.random.randint(n)
+        end_idx = np.random.randint(n)
+
+        if start_idx > end_idx:
+            start_idx, end_idx = end_idx, start_idx
+
+        empt1, empt2 = [True] * n, [True] * n
+
+        for i in range(n):
+            if i < start_idx or i > end_idx:
+                empt1[y[i]] = False
+                empt2[x[i]] = False
+
+        temp1, temp2 = x.copy(), y.copy()
+
+        id1, id2 = end_idx + 1, end_idx + 1
+
+        for i in range(n):
+            if not empt1[temp1[(i + end_idx + 1) % n]]:
+                x[id1 % n] = temp1[(i + end_idx + 1) % n]
+                id1 += 1
+
+            if not empt2[temp2[(i + end_idx + 1) % n]]:
+                y[id2 % n] = temp2[(i + end_idx + 1) % n]
+                id2 += 1
+
+        for i in range(start_idx, end_idx + 1):
+            x[i], y[i] = y[i], x[i]
+
+        # Comment to run on NQueens
+        x = [chr(e + ord("A")) for e in x]
+        y = [chr(e + ord("A")) for e in y]
+        x = np.array(x)
+        y = np.array(y)
+
+        return self.greedy_selector(np.array([x, y]), self.problem.fitness_fn)
 
 
 class FastTSP(TSPAlgo):
@@ -593,6 +684,14 @@ class FastTSP(TSPAlgo):
         super().__init__(problem)
 
     def mutate(self, x, epoch=None):
+        """Modified mutate function, other than randomly swapping to elements it also rotates the mutated route by some random number of times
+        Since the fitness function is indifferent to cyclic permutations, it does not affect the fitness funciton but adds diversity to the population.
+
+        Args:
+            x (List): Route to mutate
+            epoch (int): The current epoch of the training loop
+
+        """
         res = (super().mutate(x, epoch=epoch)).tolist()
         rotated_res = res[:]
         rotate_idx = np.random.randint(len(res))
@@ -604,6 +703,13 @@ class FastTSP(TSPAlgo):
         return np.array(rotated_res)
 
     def reproduce(self, x, y):
+        """Modified reproduce function, instead of randomly chosing both the start and end index of the slice, it iterates over all possible start indices and randomly selecting the end index.
+        It swaps them if the start_idx > end_idx
+
+        Args:
+            x (List): Parent 1
+            y (List): Parent 2
+        """
         candidates = []
         for start_idx in range(x.shape[0]):
             end_idx = np.random.randint(x.shape[0])
@@ -629,15 +735,15 @@ class FastTSP(TSPAlgo):
         return self.greedy_selector(candidates, self.problem.fitness_fn)
 
     def greedy_selector(self, population, fitness_fn):
+        """An utility function that gives the best candidate from a population based on fitness values"""
         weights = [fitness_fn(board) for board in population]
         idx = np.argmax(weights)
         return population[idx]
 
 
-def plot_comparison(
-    optimized_algo, original_algo, title, saveLocation="./", numRuns=None
-):
-    print(len(original_algo), len(original_algo[0]))
+def plot_comparison(algos, title, saveLocation="./", numRuns=None):
+    # print(len(original_algo), len(original_algo[0]))
+    print(f"Plotting {i+1}")
     sns.set_palette("colorblind")
     sns.set_context("paper")
     plt.suptitle(title, fontsize="x-large")
@@ -646,8 +752,8 @@ def plot_comparison(
     plt.xlabel("#Generation")
     plt.ylabel("Max Fitness of the Population")
     plt.yticks(np.arange(0, 31, step=2))
-    plt.plot(np.mean(optimized_algo, axis=0), label="Optimized Algorithm")
-    plt.plot(np.mean(original_algo, axis=0), label="Original Algorithm")
+    for algo, name in algos:
+        plt.plot(np.mean(algo, axis=0), label=name)
     plt.legend(loc="best")
     figName = f"{saveLocation.split('/')[-1]}{numRuns+1 if numRuns else 'image'}.png"
     plt.savefig(f"{saveLocation}/{figName}")
@@ -656,35 +762,69 @@ def plot_comparison(
 
 if __name__ == "__main__":
 
-    tsp = TSP()
-    tsp_gen = TSPAlgo(tsp)
-    tsp_gen.train(1000)
-    tsp_gen.plot_fitnesses()
-    sys.exit(0)
+    # print(
+    #     "For running TSP please please enter 'T'(without quotes) for NQueens type 'Q' (without quotes)\nPlease open the code file to run more sophisticated algorithms."
+    # )
+    # ss = input()
+    # print("Enter the number of generations to run the training")
+    # num_steps = int(input())
+    # if ss == "T":
+    #     tsp = TSP()
+    #     tsp_gen = TSPAlgo(tsp)
+    #     tsp_gen.train(num_steps)
+    #     tsp_gen.plot_fitnesses()
+    # elif ss == "Q":
+    #     n_queens = NQueens()
+    #     n_queens_gen = GeneticAlgo(n_queens)
+    #     n_queens_gen.train(num_steps)
+    #     n_queens_gen.plot_fitnesses()
+    # else:
+    #     print("Please enter a valid choice")
 
-    avg_fitnesses_fast = []
-    avg_fitnesses_slow = []
+    # print("Please open the code file to run more sophisticated algorithms")
+    # sys.exit(0)
+
+    a1f = []
+    a2f = []
+    a3f = []
+    a4f = []
+    a5f = []
     with trange(100) as t:
         for i in t:
-            n_queens = NQueens()
-            my_genetic_algo = GeneticAlgo(n_queens)
-            fast_genetic_algo = FastGeneticAlgo(n_queens)
-            my_genetic_algo.train(int(sys.argv[1]))
-            fast_genetic_algo.train(int(sys.argv[1]))
-            avg_fitnesses_fast.append((fast_genetic_algo.fitnesses))
-            avg_fitnesses_slow.append(my_genetic_algo.fitnesses)
+            tsp = TSP()
+            a1 = TSPAlgo(tsp)
+            a2 = PMXTSP(tsp)
+            a3 = UPMXAlgo(tsp)
+            a4 = OXAlgo(tsp)
+            a5 = FastTSP(tsp)
+            a1.train(int(sys.argv[1]))
+            a2.train(int(sys.argv[1]))
+            a3.train(int(sys.argv[1]))
+            a4.train(int(sys.argv[1]))
+            a5.train(int(sys.argv[1]))
+
+            a1f.append(a1.fitnesses)
+            a2f.append(a2.fitnesses)
+            a3f.append(a3.fitnesses)
+            a4f.append(a4.fitnesses)
+            a5f.append(a5.fitnesses)
             t.set_postfix(
-                maxFast=max(fast_genetic_algo.fitnesses),
-                maxSlow=max(my_genetic_algo.fitnesses),
-                gFast=len(fast_genetic_algo.fitnesses),
-                gSlow=len(my_genetic_algo.fitnesses),
+                a1=max(a1.fitnesses),
+                a2=max(a2.fitnesses),
+                a3=max(a3.fitnesses),
+                a4=max(a4.fitnesses),
+                a5=max(a5.fitnesses),
             )
-            if (i + 1) % 10 == 0:
+            if (i + 1) % 2 == 0:
                 plot_comparison(
-                    avg_fitnesses_fast,
-                    avg_fitnesses_slow,
-                    title="Genetic Algorithm on NQueens",
-                    saveLocation="./Plots/GenNQueens",
+                    [
+                        (a1f, "Original Algorithm"),
+                        (a2f, "PMX"),
+                        (a3f, "UPMX"),
+                        (a4f, "OX"),
+                        (a5f, "FastTSP"),
+                    ],
+                    title="Genetic Algorithm on TSP",
                     numRuns=i,
                 )
                 # sys.exit(0)
