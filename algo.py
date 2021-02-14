@@ -353,7 +353,7 @@ class GeneticAlgo:
         # probs = [prob/sum(probs) for prob in probs]
         indices = np.random.choice([i for i in range(len(population))], p=probs)
         population = np.array(population)
-        return population[indices].flatten()
+        return population[indices]
 
     def reproduce(self, x, y):
         """Function responsible for creating a child from when given two parents
@@ -656,11 +656,11 @@ def plot_comparison(
 
 if __name__ == "__main__":
 
-    tsp = TSP()
-    tsp_gen = TSPAlgo(tsp)
-    tsp_gen.train(1000)
-    tsp_gen.plot_fitnesses()
-    sys.exit(0)
+    # tsp = TSP()
+    # tsp_gen = TSPAlgo(tsp)
+    # tsp_gen.train(1000)
+    # tsp_gen.plot_fitnesses()
+    # sys.exit(0)
 
     avg_fitnesses_fast = []
     avg_fitnesses_slow = []
@@ -684,7 +684,7 @@ if __name__ == "__main__":
                     avg_fitnesses_fast,
                     avg_fitnesses_slow,
                     title="Genetic Algorithm on NQueens",
-                    saveLocation="./Plots/GenNQueens",
+                    saveLocation="./Plots/GenNQueens2",
                     numRuns=i,
                 )
                 # sys.exit(0)
