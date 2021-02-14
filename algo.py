@@ -533,7 +533,7 @@ class TSPAlgo(GeneticAlgo):
         return population[idx]
 
 
-class PMXTSP(TSPAlgo):
+class PMXAlgo(TSPAlgo):
     """Genetic Algorithm with PMX Crossover"""
 
     def __init__(self, problem):
@@ -597,6 +597,7 @@ class UPMXAlgo(TSPAlgo):
         """Reproduce using UPMX (Uniform Partially Mapped) Crossover"""
         x = x.tolist()
         y = y.tolist()
+        # Uncommnent to run on TSP
         x = [ord(e) - ord("A") for e in x]
         y = [ord(e) - ord("A") for e in y]
         n = len(x)
@@ -618,6 +619,7 @@ class UPMXAlgo(TSPAlgo):
                 p1[temp1], p1[temp2] = p1[temp2], p1[temp1]
                 p2[temp1], p2[temp2] = p2[temp2], p2[temp1]
 
+        # Uncommnent to run on TSP
         x = [chr(e + ord("A")) for e in x]
         y = [chr(e + ord("A")) for e in y]
 
@@ -762,27 +764,27 @@ def plot_comparison(algos, title, saveLocation="./", numRuns=None):
 
 if __name__ == "__main__":
 
-    # print(
-    #     "For running TSP please please enter 'T'(without quotes) for NQueens type 'Q' (without quotes)\nPlease open the code file to run more sophisticated algorithms."
-    # )
-    # ss = input()
-    # print("Enter the number of generations to run the training")
-    # num_steps = int(input())
-    # if ss == "T":
-    #     tsp = TSP()
-    #     tsp_gen = TSPAlgo(tsp)
-    #     tsp_gen.train(num_steps)
-    #     tsp_gen.plot_fitnesses()
-    # elif ss == "Q":
-    #     n_queens = NQueens()
-    #     n_queens_gen = GeneticAlgo(n_queens)
-    #     n_queens_gen.train(num_steps)
-    #     n_queens_gen.plot_fitnesses()
-    # else:
-    #     print("Please enter a valid choice")
+    print(
+        "For running TSP please please enter 'T'(without quotes) for NQueens type 'Q' (without quotes)\nPlease open the code file to run more sophisticated algorithms."
+    )
+    ss = input()
+    print("Enter the number of generations to run the training")
+    num_steps = int(input())
+    if ss == "T":
+        tsp = TSP()
+        tsp_gen = TSPAlgo(tsp)
+        tsp_gen.train(num_steps)
+        tsp_gen.plot_fitnesses()
+    elif ss == "Q":
+        n_queens = NQueens()
+        n_queens_gen = GeneticAlgo(n_queens)
+        n_queens_gen.train(num_steps)
+        n_queens_gen.plot_fitnesses()
+    else:
+        print("Please enter a valid choice")
 
-    # print("Please open the code file to run more sophisticated algorithms")
-    # sys.exit(0)
+    print("Please open the code file to run more sophisticated algorithms")
+    sys.exit(0)
 
     a1f = []
     a2f = []
@@ -793,7 +795,7 @@ if __name__ == "__main__":
         for i in t:
             tsp = TSP()
             a1 = TSPAlgo(tsp)
-            a2 = PMXTSP(tsp)
+            a2 = PMXAlgo(tsp)
             a3 = UPMXAlgo(tsp)
             a4 = OXAlgo(tsp)
             a5 = FastTSP(tsp)
